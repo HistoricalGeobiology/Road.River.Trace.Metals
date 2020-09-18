@@ -1,5 +1,5 @@
-This repository contains the required R code and data files to produce the all of the main text figures in 
-‘An exceptional record of early to mid-Paleozoic redox change from the Road River Group, Yukon, Canada’ 
+This repository contains the required R code and data files to produce the all of the main text geochemistry 
+figures and statistical analyses in ‘An exceptional record of early to mid-Paleozoic redox change from the Road River Group, Yukon, Canada’ 
 Erik A. Sperling, Michael J. Melchin, Tiffani Fraser, Richard G. Stockey, Una C. Farrell, Liam Bhajan, Tessa N. Browne,
 Devon B. Cole, Benjamin C. Gill, Alfred Lenz, David K. Loydell, Joseph Malinowski, Austin J. Miller, 
 Stephanie Plaza-Torres, Beatrice Rodewald, Alan D. Rooney, Sabrina A. Tecklenburg, Jacqueline M. Vogel, 

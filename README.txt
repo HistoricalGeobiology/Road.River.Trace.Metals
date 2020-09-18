@@ -15,6 +15,8 @@ dplyr
 egg
 ggplot2
 simpleboot
+rpart
+rpart.plot
 
 The deeptime package is currently only available on GitHub, and will need to be installed from there to reproduce
 Figures 3 and 4. This can be achieved by running the following commands in your R console (ignore the first line 

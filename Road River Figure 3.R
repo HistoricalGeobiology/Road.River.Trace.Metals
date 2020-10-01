@@ -1,11 +1,14 @@
 library(ggplot2)
 library(dplyr)
-library(binom)
 library(deeptime)
 library(egg)
+library(simpleboot)
 
 # Set working directory for plot to be saved in
 setwd()
+
+# set seed for bootstrap analyses
+set.seed(408)
 
 # Specify start and end ages
 start_age <- 490
@@ -20,39 +23,56 @@ stages.renamed$abbr[69:91] <- c("Fm", "Frs", "Gv", "E", "Em", "P", "Lc", "P", "L
 # Panel A - proportion euxinic samples based on iron speciation
 ## ------------------------------------------------------------
 
-# Import data
+# Load data file
 load("Sperling.Road.River.Data.RData")
 
 # Filter to anoxic samples with ages only
-geochem.anox <- filter(geochem, FeHR.FeT >= 0.38 & !(is.na(interpreted_age)))
+geochem.anox <- filter(geochem, FeHR.FeT >= 0.38 & !(is.na(interpreted_age)) & !(is.na(lat_dec)) & !(is.na(long_dec)) &
+                       interpreted_age <= start_age, interpreted_age >= end_age)
+
+# Source invweight function - function from Keller & Schoene (Nature, 2012)
+source("invweight.R")
+
+## Geospatial weighting coefficients for anoxic shale samples [function "invweight" uses declustering eqn from Keller et al. 2012]
+geochem.anox$k <- invweight(lat = geochem.anox$lat_dec,
+                      lon = geochem.anox$long_dec,
+                      age = geochem.anox$interpreted_age)
 
 # Divide samples into age bins
 geochem.anox$time.bin <-  seq(end_age, start_age,  bin_size)[as.numeric(cut(geochem.anox$interpreted_age, seq(end_age, start_age,  bin_size)))]+bin_size/2
 
-# Calculate number of samples per bin
-n.samples <- as.data.frame(table(geochem.anox$time.bin))
+# Binary coding of euxinic samples
+geochem.anox$euxinic.Fe[geochem.anox$Fe.py.FeHR >= 0.7] <- 1
+geochem.anox$euxinic.Fe[geochem.anox$Fe.py.FeHR < 0.7] <- 0
 
-# Calculate number of euxinic samples within each bin
-n.successes <-  as.data.frame(table(filter(geochem.anox, Fe.py.FeHR >= 0.7)$time.bin))
+## Bootstrap bimodal euxinia classification using invweight
+eux_bootmeans <- as.numeric() 
 
-# Combine frequency tables of all anoxic and just euxinic samples
-binom.input <- cbind(n.samples, n.successes$Freq)
+## Loop through time bins and generate mean authigenic concentration values based on spatial bootstrap
+for (bin in (seq(end_age, start_age,  bin_size)+bin_size/2)){
+  timebin <- geochem.anox %>%
+    filter(time.bin==bin) %>%
+    filter(!is.na(euxinic.Fe)) %>%
+    filter(!is.na(k))
+  
+  if(nrow(timebin)==0){
+    print(bin)
+  }else{
+    bootmean <- one.boot(timebin$euxinic.Fe, mean, R=1000, weights=1/timebin$k)
+    eux_bootmeans <- rbind(eux_bootmeans, cbind(bootmean$t, rep(bin, nrow(bootmean$t))))
+  }}
 
-# Rename column headings for clarity
-names(binom.input) <- c("Age", "N", "eux")
+## Generate dataframe of results and name columns
+eux.Fe <- as.data.frame(eux_bootmeans)
+names(eux.Fe) <- c("Prop", "Age")
 
-# Generate dataframe of binomial confidence intervals and means for proportion of euxinic samples
-eux.time.sum.Fe <- cbind(binom.input$Age,
-                        binom.confint(binom.input$eux, binom.input$N, conf.level  = 0.95, methods = c("asymptotic")))
-
-# Give age column clear name
-names(eux.time.sum.Fe)[1] <- "Age"
-
-# Set age as numeric variable
-eux.time.sum.Fe$Age <- as.numeric(paste(eux.time.sum.Fe$Age))
+# Generate an individual bootstrapped mean per time bin
+eux.sum.Fe <- eux.Fe %>%
+  group_by(Age) %>%
+  summarise(Prop.mean = mean(Prop), Prop.min = mean(Prop) - 2*(sd(Prop, na.rm=T)), Prop.max = mean(Prop) + 2 * (sd(Prop, na.rm=T)))
 
 # Generate panel A plot
-eux.plot.Fe <- ggplot(eux.time.sum.Fe, aes(x=Age, y=mean, ymin=lower, ymax=upper))+
+eux.plot.Fe <- ggplot(eux.sum.Fe, aes(x=Age, y=Prop.mean, ymin=Prop.min, ymax=Prop.max))+
   geom_pointrange(size=1)+
   geom_point(shape=21, size=5, fill="grey80")+
   coord_cartesian(xlim=c(start_age,end_age-1), ylim=c(-0.05,1.05), expand=FALSE)+
@@ -115,7 +135,9 @@ eux.cutoff <- 4
 
 # Filter samples - all anoxic samples with age, Mo, U and Al data
 geochem.anox_all.MoU <- filter(geochem, (FeHR.FeT >= 0.38 | FeT.Al >= 0.53 ) & !(is.na(interpreted_age)) & 
-                                 !(is.na(Mo..ppm.)) &  !(is.na(U..ppm.)) & !(is.na(Al..wt..)))
+                                 !(is.na(Mo..ppm.)) &  !(is.na(U..ppm.)) & !(is.na(Al..wt..)) &  
+                                 !(is.na(lat_dec)) & !(is.na(long_dec)) &
+                                 interpreted_age <= start_age, interpreted_age >= end_age)
 
 
 # Calculations for authegenic enrichments (Rudnick & Gao for Mo and U)
@@ -131,30 +153,49 @@ geochem.anox_all.MoU$Mo_U.auth <- geochem.anox_all.MoU$Mo.auth/geochem.anox_all.
 # Divide samples into age bins
 geochem.anox_all.MoU$time.bin <-  seq(end_age, start_age,  bin_size)[as.numeric(cut(geochem.anox_all.MoU$interpreted_age, seq(end_age, start_age,  bin_size)))]+bin_size/2
 
-# Calculate number of samples per bin
-n.samples <- as.data.frame(table(geochem.anox_all.MoU$time.bin))
+# Source invweight function - function from Keller & Schoene (Nature, 2012)
+source("invweight.R")
 
-# Calculate number of successes per bin
-n.successes <-  as.data.frame(table(filter(geochem.anox_all.MoU, Mo_U.auth >= eux.cutoff)$time.bin))
+## Geospatial weighting coefficients for anoxic shale samples [function "invweight" uses declustering eqn from Keller et al. 2012]
+geochem.anox_all.MoU$k <- invweight(lat = geochem.anox_all.MoU$lat_dec,
+                            lon = geochem.anox_all.MoU$long_dec,
+                            age = geochem.anox_all.MoU$interpreted_age)
 
-# Combine frequency tables of all anoxic and just euxinic samples - add zero to end of 485 bin
-binom.input <- cbind(n.samples, c(n.successes$Freq, 0))
+# Divide samples into age bins
+geochem.anox_all.MoU$time.bin <-  seq(end_age, start_age,  bin_size)[as.numeric(cut(geochem.anox_all.MoU$interpreted_age, seq(end_age, start_age,  bin_size)))]+bin_size/2
 
-# Rename column headings for clarity
-names(binom.input) <- c("Age", "N", "eux")
+# Binary coding of euxinic samples
+geochem.anox_all.MoU$euxinic.MoU[geochem.anox_all.MoU$Mo_U.auth >= eux.cutoff] <- 1
+geochem.anox_all.MoU$euxinic.MoU[geochem.anox_all.MoU$Mo_U.auth < eux.cutoff] <- 0
 
-# Generate dataframe of binomial confidence intervals and means for proportion of euxinic samples
-eux.time.sum.MoU <- cbind(binom.input$Age,
-                      binom.confint(binom.input$eux, binom.input$N, conf.level  = 0.95, methods = c("asymptotic")))
+## Bootstrap bimodal euxinia classification using invweight
+eux_bootmeans <- as.numeric() 
 
-# Give age column clear name
-names(eux.time.sum.MoU)[1] <- "Age"
+## Loop through time bins and generate mean authigenic concentration values based on spatial bootstrap
+for (bin in (seq(end_age, start_age,  bin_size)+bin_size/2)){
+  timebin <- geochem.anox_all.MoU %>%
+    filter(time.bin==bin) %>%
+    filter(!is.na(euxinic.MoU)) %>%
+    filter(!is.na(k))
+  
+  if(nrow(timebin)==0){
+    print(bin)
+  }else{
+    bootmean <- one.boot(timebin$euxinic.MoU, mean, R=1000, weights=1/timebin$k)
+    eux_bootmeans <- rbind(eux_bootmeans, cbind(bootmean$t, rep(bin, nrow(bootmean$t))))
+  }}
 
-# Set age as numeric variable
-eux.time.sum.MoU$Age <- as.numeric(paste(eux.time.sum.MoU$Age))
+## Generate dataframe of results and name columns
+eux.Mo.U <- as.data.frame(eux_bootmeans)
+names(eux.Mo.U) <- c("Prop", "Age")
+
+# Generate an individual bootstrapped mean per time bin
+eux.sum.Mo.U <- eux.Mo.U %>%
+  group_by(Age) %>%
+  summarise(Prop.mean = mean(Prop), Prop.min = mean(Prop) - 2*(sd(Prop, na.rm=T)), Prop.max = mean(Prop) + 2 * (sd(Prop, na.rm=T)))
 
 # Generate panel B plot
-eux.plot.MoU <- ggplot(eux.time.sum.MoU, aes(x=Age, y=mean, ymin=lower, ymax=upper))+
+eux.plot.MoU <- ggplot(eux.sum.Mo.U, aes(x=Age, y=Prop.mean, ymin=Prop.min, ymax=Prop.max))+
   geom_pointrange(size=1)+
   geom_point(shape=21, size=5, fill="grey80")+
   coord_cartesian(xlim=c(start_age,end_age-1), ylim=c(-0.05,1.05), expand=FALSE)+
@@ -211,9 +252,17 @@ eux.plot.MoU_sample.hist
 # Panel C - Graptolite diversity 
 ## ------------------------------------------------------------
 
+# Plot includes major evolutionary transitions in the evolution of land plants, based on D'Antonio, Ibarra and Boyce (2020, Geology)
+
 grap.plot <- ggplot(graps, aes(x=bin.center, y=richness))+
   geom_line(size=1)+
   geom_ribbon(aes(ymax=richness, ymin=0), color=NA, fill="grey80")+
+  annotate(geom="rect", ymin=110, ymax=116, xmin=-Inf, xmax=470, fill=rgb(166,207,134, maxColorValue = 255), color=NA)+
+  annotate(geom="rect", ymin=101, ymax=107, xmin=-Inf, xmax=419.2, fill=rgb(140,176,108, maxColorValue = 255), color=NA)+
+  annotate(geom="rect", ymin=92, ymax=98, xmin=-Inf, xmax=393.3, fill=rgb(103,143,102, maxColorValue = 255), color=NA)+
+  annotate(geom="text", x=370, y=113.5, size=6, label="Land plants")+
+  annotate(geom="text", x=379, y=104.5, size=6, label="Rooted vascular plants")+
+  annotate(geom="text", x=365, y=95.5, size=6, label="Trees")+
   coord_geo(xlim=c(start_age,end_age-1), ylim=c(0,122),expand=FALSE,
             pos = as.list(rep("bottom", 2)),
             abbrv=list(TRUE, FALSE),

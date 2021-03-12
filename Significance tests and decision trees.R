@@ -3,7 +3,8 @@ library(rpart)
 library(rpart.plot)
 
 # Load data file
-load("Sperling.Road.River.Data.RData")
+load("Sperling.Road.River.Data.2021.RData")
+
 
 # Calculations for authigenic enrichments (Rudnick & Gao for Mo and U)
 crustal.Al <- (15.40/(26.981539*2+15.999*3))*(26.981539*2) # calculation from Al2O3 wt% to Al wt%
@@ -33,6 +34,15 @@ geochem.anox$euxinicOxideAndPyrite[geochem.anox$OxideAndPyrite < 0.7] <- 0
 geochem.anox$euxinicMoU[geochem.anox$Mo_U.auth >= 4] <- 1
 geochem.anox$euxinicMoU[geochem.anox$Mo_U.auth < 4] <- 0
 
+# Binary coding of whether an anoxic sample is dominated by detrital P or authigenic P, based on a cutoff of 1000 pppm / 0.1 weight percent P
+geochem.anox$authigenic.P[geochem.anox$P..ppm. >= 1000] <- 1
+geochem.anox$authigenic.P[geochem.anox$P..ppm. < 1000] <- 0
+
+
+#Add P/Al and Corg/Ptotal to geochem.anox, eqn from Algeo and Li 2020 GCA, multiplied by 10,000 to balance units
+geochem.anox$Corg_P <- ((geochem.anox$TOC..wt../12)/(geochem.anox$P..ppm./30.97))*10000
+geochem.anox$P_Al <- (geochem.anox$P..ppm./geochem.anox$Al..wt..)
+
 #Separate into time bins for statistical analyses
 Pre467 <-filter(geochem.anox, interpreted_age>=467)
 Middle <-filter(geochem.anox, interpreted_age<467 & interpreted_age>408)
@@ -49,18 +59,19 @@ PeelPost408 <- filter(Post408, !(is.na(Figure.2.Composite.Height)))
 ###########
 
 #Calculate proportions of euxinic samples in the global dataset and number of euxinic versus ferruginous samples in different time bins and conduct Chi square tests
-Pre467FeSpeciationChi <- c(203,82)
-MiddleFeSpeciationChi <- c(586,174)
+#(no, yes)
+Pre467FeSpeciationChi <- c(202,82)
+MiddleFeSpeciationChi <- c(776,256)
 dat <- rbind(Pre467FeSpeciationChi, MiddleFeSpeciationChi)
 chisq.test(dat, correct=FALSE)
 
-MiddleFeSpeciationChi <- c(586,174)
-Post408FeSpeciationChi <- c(92,130)
+MiddleFeSpeciationChi <- c(776,256)
+Post408FeSpeciationChi <- c(106,198)
 dat <- rbind(MiddleFeSpeciationChi, Post408FeSpeciationChi)
 chisq.test(dat, correct=FALSE)
 
-Pre467FeSpeciationChi <- c(203,82)
-Post408FeSpeciationChi <- c(92,130)
+Pre467FeSpeciationChi <- c(202,82)
+Post408FeSpeciationChi <- c(106,198)
 dat <- rbind(Pre467FeSpeciationChi, Post408FeSpeciationChi)
 chisq.test(dat, correct=FALSE)
 
@@ -74,17 +85,17 @@ rpart.plot(DecTree, digits=-4, main="Euxinic-Ferruginous iron speciation classif
 #Calculate proportions of euxinic samples in the global dataset (for with oxides considered to represent weathered pyrite) and number of euxinic versus ferruginous samples in different time bins and conduct Chi square tests
 #For all analyses, determine real p-value if R shortens to <2.2E-16
 Pre467FeSpeciationOxidesChi <- c(92,175)
-MiddleFeSpeciationOxidesChi <- c(352,275)
+MiddleFeSpeciationOxidesChi <- c(422,366)
 dat <- rbind(Pre467FeSpeciationOxidesChi, MiddleFeSpeciationOxidesChi)
 chisq.test(dat, correct=FALSE)
 
-MiddleFeSpeciationOxidesChi <- c(352,275)
-Post408FeSpeciationOxidesChi <- c(30,143)
+MiddleFeSpeciationOxidesChi <- c(422,366)
+Post408FeSpeciationOxidesChi <- c(41,214)
 dat <- rbind(MiddleFeSpeciationOxidesChi, Post408FeSpeciationOxidesChi)
 chisq.test(dat, correct=FALSE)
 
 Pre467FeSpeciationOxidesChi <- c(92,175)
-Post408FeSpeciationOxidesChi <- c(30,143)
+Post408FeSpeciationOxidesChi <- c(41,214)
 dat <- rbind(Pre467FeSpeciationOxidesChi, Post408FeSpeciationOxidesChi)
 chisq.test(dat, correct=FALSE)
 
@@ -94,18 +105,18 @@ summary(DecTree)
 rpart.plot(DecTree, digits=-4, main="Euxinic-Ferruginous iron speciation (all oxides = pyrite) classification tree")
 
 #Calculate proportions of euxinic samples in the global dataset using Mo/U ratios and number of euxinic versus ferruginous samples in different time bins and conduct Chi square tests
-Pre467euxinicMoUChi <- c(272,13)
-MiddleeuxinicMoUChi <- c(557,57)
+Pre467euxinicMoUChi <- c(302,10)
+MiddleeuxinicMoUChi <- c(778,102)
 dat <- rbind(Pre467euxinicMoUChi, MiddleeuxinicMoUChi)
 chisq.test(dat, correct=FALSE)
 
-MiddleeuxinicMoUChi <- c(557,57)
-Post408euxinicMoUchi <- c(200,125)
+MiddleeuxinicMoUChi <- c(778,102)
+Post408euxinicMoUchi <- c(520,279)
 dat <- rbind(MiddleeuxinicMoUChi, Post408euxinicMoUchi)
 chisq.test(dat, correct=FALSE)
 
-Pre467euxinicMoUChi <- c(272,13)
-Post408euxinicMoUchi <- c(200,125)
+Pre467euxinicMoUChi <- c(302,10)
+Post408euxinicMoUchi <- c(520,279)
 dat <- rbind(Pre467euxinicMoUChi, Post408euxinicMoUchi)
 chisq.test(dat, correct=FALSE)
 
@@ -113,6 +124,54 @@ DecTree <- rpart(geochem.anox$euxinicMoU ~ interpreted_age, method="class", data
 printcp(DecTree)
 summary(DecTree)
 rpart.plot(DecTree, digits=-4, main="Euxinic-Ferruginous Mo/U classification tree")
+
+#Test differences in Corg/Ptotal
+
+#Conduct Shapiro-Wilk tests for normality. Low values reject the null hypothesis that data come from a normal distribution
+shapiro.test(Pre467$Corg_P)
+shapiro.test(Middle$Corg_P)
+shapiro.test(Post408$Corg_P)
+
+#Normality is rejected, verified by histograms, run Mann-Whitney/Wilcoxon test
+wilcox.test(Pre467$Corg_P, Middle$Corg_P)
+wilcox.test(Middle$Corg_P,Post408$Corg_P)
+wilcox.test(Pre467$Corg_P, Post408$Corg_P)
+
+#Regression tree for Corg/Ptotal in global dataset
+RegTreeCorgPtotal <- rpart(geochem.anox$Corg_P ~ interpreted_age, method="anova", data=geochem.anox)
+printcp(RegTreeCorgPtotal)
+summary(RegTreeCorgPtotal)
+rpart.plot(RegTreeCorgPtotal, digits=-4, main="Global Corg/Ptotal (anoxic samples) regression tree")
+
+
+#Calculate proportions of anoxic samples where P is dominated by detrital P (<1000 ppm P) versus samples where P is dominated by authigenic P (>1000 ppm P), and conduct Chi square tests
+#(no,yes)
+Pre467anoxicPauth <- c(178,147)
+MiddleanoxicPauth <- c(829,131)
+dat <- rbind(Pre467anoxicPauth, MiddleanoxicPauth)
+chisq.test(dat, correct=FALSE)
+
+MiddleanoxicPauth <- c(829,131)
+Post408anoxicPauth <- c(996,55)
+dat <- rbind(MiddleanoxicPauth, Post408anoxicPauth)
+chisq.test(dat, correct=FALSE)
+
+Pre467anoxicPauth <- c(178,147)
+Post408anoxicPauth <- c(996,55)
+dat <- rbind(Pre467anoxicPauth, Post408anoxicPauth)
+chisq.test(dat, correct=FALSE)
+
+DecTree <- rpart(geochem.anox$authigenic.P ~ interpreted_age, method="class", data=geochem.anox)
+printcp(DecTree)
+summary(DecTree)
+rpart.plot(DecTree, digits=-4, main="Detrital-Authigenic P classification tree")
+
+###To cut
+DecTree <- rpart(geochem.anox$P..ppm. ~ interpreted_age, method="anova", data=geochem.anox)
+printcp(DecTree)
+summary(DecTree)
+rpart.plot(DecTree, digits=-4, main="Detrital-Authigenic P classification tree")
+
 
 ############
 ##Peel River analyses
@@ -184,4 +243,44 @@ printcp(DecTree)
 summary(DecTree)
 rpart.plot(DecTree, digits=-4, main="Peel River Euxinic-Ferruginous Mo/U classification tree")
 
+#Test differences in Corg/Ptotal
+
+#Conduct Shapiro-Wilk tests for normality. Low values reject the null hypothesis that data come from a normal distribution
+shapiro.test(PeelPre467$Corg_P)
+shapiro.test(PeelMiddle$Corg_P)
+shapiro.test(PeelPost408$Corg_P)
+
+#Normality is rejected, verified by histograms, run Mann-Whitney/Wilcoxon test
+wilcox.test(PeelPre467$Corg_P, PeelMiddle$Corg_P)
+wilcox.test(PeelMiddle$Corg_P,PeelPost408$Corg_P)
+wilcox.test(PeelPre467$Corg_P, PeelPost408$Corg_P)
+
+#Regression tree for Corg/Ptotal in Peel River section
+RegTreeCorgPtotal <- rpart(Peel$Corg_P ~ interpreted_age, method="anova", data=Peel)
+printcp(RegTreeCorgPtotal)
+summary(RegTreeCorgPtotal)
+rpart.plot(RegTreeCorgPtotal, digits=-4, main="Peel River Corg/Ptotal (anoxic samples) regression tree")
+
+
+#Calculate proportions of anoxic samples where P is dominated by detrital P (<1000 ppm P) versus samples where P is dominated by authigenic P (>1000 ppm P), and conduct Chi square tests
+#(no,yes)
+PeelPre467anoxicPauth <- c(117,114)
+PeelMiddleanoxicPauth <- c(277,84)
+dat <- rbind(PeelPre467anoxicPauth, PeelMiddleanoxicPauth)
+chisq.test(dat, correct=FALSE)
+
+PeelMiddleanoxicPauth <- c(277,84)
+PeelPost408anoxicPauth <- c(118,6)
+dat <- rbind(PeelMiddleanoxicPauth, PeelPost408anoxicPauth)
+chisq.test(dat, correct=FALSE)
+
+PeelPre467anoxicPauth <- c(117,114)
+PeelPost408anoxicPauth <- c(118,6)
+dat <- rbind(PeelPre467anoxicPauth, PeelPost408anoxicPauth)
+chisq.test(dat, correct=FALSE)
+
+DecTree <- rpart(Peel$authigenic.P ~ interpreted_age, method="class", data=Peel)
+printcp(DecTree)
+summary(DecTree)
+rpart.plot(DecTree, digits=-4, main="Detrital-Authigenic P classification tree for Peel River")
 
